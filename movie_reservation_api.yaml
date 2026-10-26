@@ -1,0 +1,219 @@
+openapi: 3.0.3
+info:
+  title: Movie Theater Seat Reservation API
+  version: 1.0.0
+  description: >
+    This API lets customers temporarily reserve seats for a specific movie
+    showtime while they complete checkout. Customers can create a reservation,
+    view its details, or cancel it. A reservation holds seats for 10 minutes;
+    after that, an unpaid reservation expires and the seats become available
+    again. This specification describes the API contract only and does not
+    implement a working booking system.
+servers:
+  - url: https://api.example.com
+    description: Example server (not functional)
+tags:
+  - name: Reservations
+    description: Create, view, and cancel seat reservations.
+paths:
+  /reservations:
+    post:
+      tags:
+        - Reservations
+      summary: Reserve seats for a movie showtime
+      description: Creates a temporary hold on the requested seats if all are available.
+      operationId: createReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationRequest'
+            example:
+              showtimeId: 501
+              seatIds:
+                - A5
+                - A6
+      responses:
+        '201':
+          description: Reservation created and seats held successfully.
+          headers:
+            Location:
+              description: URL of the new reservation.
+              schema:
+                type: string
+              example: /reservations/9001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              example:
+                reservationId: 9001
+                showtimeId: 501
+                seatIds: [A5, A6]
+                status: held
+                expiresAt: '2026-11-01T18:10:00Z'
+        '400':
+          description: Invalid request, such as an empty seat list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_REQUEST
+                message: At least one seat must be selected.
+        '409':
+          description: One or more requested seats are already reserved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: SEATS_UNAVAILABLE
+                message: Seat A5 is no longer available.
+  /reservations/{reservationId}:
+    get:
+      tags:
+        - Reservations
+      summary: Get a reservation by ID
+      description: Returns the selected seats, showtime, status, and expiration time.
+      operationId: getReservation
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: Reservation found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              example:
+                reservationId: 9001
+                showtimeId: 501
+                seatIds: [A5, A6]
+                status: held
+                expiresAt: '2026-11-01T18:10:00Z'
+        '400':
+          description: Reservation ID is not a valid positive integer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No reservation exists with that ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: NOT_FOUND
+                message: Reservation 9001 was not found.
+    delete:
+      tags:
+        - Reservations
+      summary: Cancel a reservation by ID
+      description: >
+        Cancels an active, unpaid seat hold and releases the seats for
+        other customers. Paid reservations cannot be canceled using this endpoint.
+      operationId: cancelReservation
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '204':
+          description: Reservation canceled successfully; no response body.
+        '400':
+          description: Reservation ID is not a valid positive integer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No reservation exists with that ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: NOT_FOUND
+                message: Reservation 9001 was not found.
+        '409':
+          description: Reservation cannot be canceled, for example because it is already paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: CANNOT_CANCEL
+                message: Paid reservations cannot be canceled through this endpoint.
+components:
+  parameters:
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      description: Unique ID of the seat reservation.
+      schema:
+        type: integer
+        minimum: 1
+      example: 9001
+  schemas:
+    CreateReservationRequest:
+      type: object
+      required:
+        - showtimeId
+        - seatIds
+      properties:
+        showtimeId:
+          type: integer
+          minimum: 1
+          description: Unique ID of the selected movie showtime.
+          example: 501
+        seatIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Seat identifiers to hold for the chosen showtime.
+          items:
+            type: string
+          example: [A5, A6]
+    Reservation:
+      type: object
+      required:
+        - reservationId
+        - showtimeId
+        - seatIds
+        - status
+        - expiresAt
+      properties:
+        reservationId:
+          type: integer
+          example: 9001
+        showtimeId:
+          type: integer
+          example: 501
+        seatIds:
+          type: array
+          items:
+            type: string
+          example: [A5, A6]
+        status:
+          type: string
+          enum: [held, paid, canceled, expired]
+          example: held
+        expiresAt:
+          type: string
+          format: date-time
+          description: Time when an unpaid seat hold expires.
+          example: '2026-11-01T18:10:00Z'
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: NOT_FOUND
+        message:
+          type: string
+          example: Reservation not found.
